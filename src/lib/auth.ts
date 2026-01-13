@@ -6,31 +6,29 @@ import Google from "next-auth/providers/google";
 
 import prisma from "@/lib/prisma";
 
-// Safe logging and strict runtime assertions for OAuth env
+// Force strictly localhost:3000 for development
+const FIXED_BASE_URL = "http://localhost:3000";
 const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-const nextAuthUrl = process.env.NEXTAUTH_URL?.trim();
 const authSecret = (process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET)?.trim();
 
 (() => {
   const suffix = googleClientId?.slice(-6) || "MISSING";
   const secretLen = googleClientSecret?.length ?? 0;
   const authSecretLen = authSecret?.length ?? 0;
-  const url = nextAuthUrl || "MISSING";
 
   console.log("----------------------------------------");
   console.log("[AUTH][STARTUP] ENVIRONMENT CHECK:");
   console.log("  GOOGLE_CLIENT_ID suffix:", suffix);
   console.log("  GOOGLE_CLIENT_SECRET length:", secretLen);
-  console.log("  NEXTAUTH_URL:", url);
+  console.log("  FORCED BASE URL:", FIXED_BASE_URL);
   console.log("  AUTH_SECRET/NEXTAUTH_SECRET length:", authSecretLen);
   console.log("----------------------------------------");
 
-  if (!googleClientId || !googleClientSecret || !nextAuthUrl || !authSecret) {
+  if (!googleClientId || !googleClientSecret || !authSecret) {
     const missing = [];
     if (!googleClientId) missing.push("GOOGLE_CLIENT_ID");
     if (!googleClientSecret) missing.push("GOOGLE_CLIENT_SECRET");
-    if (!nextAuthUrl) missing.push("NEXTAUTH_URL");
     if (!authSecret) missing.push("AUTH_SECRET/NEXTAUTH_SECRET");
     
     throw new Error(`[AUTH][FATAL] Missing environment variables: ${missing.join(", ")}`);
@@ -40,7 +38,7 @@ const authSecret = (process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET)?.tri
 export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
   secret: authSecret,
-  trustHost: true,
+  trustHost: false, // Do not trust inferred hosts or network IPs
   debug: true,
   session: {
     strategy: "jwt",
@@ -110,6 +108,14 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // Always force redirects to resolve to localhost:3000
+      // If the redirect URL is relative, prepend localhost:3000
+      // If it's absolute but on a different host, force it back to localhost:3000
+      if (url.startsWith("/")) return `${FIXED_BASE_URL}${url}`;
+      else if (new URL(url).origin === FIXED_BASE_URL) return url;
+      return FIXED_BASE_URL;
+    },
     async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
