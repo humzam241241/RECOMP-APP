@@ -69,8 +69,13 @@ export default function SignUpPage() {
     }
   };
 
-  const handleGoogleSignUp = () => {
-    signIn("google", { callbackUrl: "/onboarding" });
+  const handleGoogleSignUp = async () => {
+    try {
+      await signIn("google", { callbackUrl: "/onboarding" });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setError(`Google sign-up failed: ${errorMsg}`);
+    }
   };
 
   return (

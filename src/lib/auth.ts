@@ -6,69 +6,48 @@ import Google from "next-auth/providers/google";
 
 import prisma from "@/lib/prisma";
 
-// Force strictly localhost:3000 for development
-const FIXED_BASE_URL = "http://localhost:3000";
-const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-const authSecret = (process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET)?.trim();
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const authSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
 
-(() => {
-  const suffix = googleClientId?.slice(-6) || "MISSING";
-  const secretLen = googleClientSecret?.length ?? 0;
-  const authSecretLen = authSecret?.length ?? 0;
+console.log("🔐 [AUTH] Starting NextAuth with Google OAuth");
+console.log("📍 CLIENT_ID:", googleClientId ? `${googleClientId.slice(0, 10)}...` : "MISSING");
+console.log("📍 CLIENT_SECRET:", googleClientSecret ? "Present" : "MISSING"); 
+console.log("📍 AUTH_SECRET:", authSecret ? "Present" : "MISSING");
+console.log("📍 NEXTAUTH_URL:", process.env.NEXTAUTH_URL);
+console.log("📍 NODE_ENV:", process.env.NODE_ENV);
 
-  console.log("----------------------------------------");
-  console.log("[AUTH][STARTUP] ENVIRONMENT CHECK:");
-  console.log("  GOOGLE_CLIENT_ID suffix:", suffix);
-  console.log("  GOOGLE_CLIENT_SECRET length:", secretLen);
-  console.log("  FORCED BASE URL:", FIXED_BASE_URL);
-  console.log("  AUTH_SECRET/NEXTAUTH_SECRET length:", authSecretLen);
-  console.log("----------------------------------------");
-
-  if (!googleClientId || !googleClientSecret || !authSecret) {
-    const missing = [];
-    if (!googleClientId) missing.push("GOOGLE_CLIENT_ID");
-    if (!googleClientSecret) missing.push("GOOGLE_CLIENT_SECRET");
-    if (!authSecret) missing.push("AUTH_SECRET/NEXTAUTH_SECRET");
-    
-    throw new Error(`[AUTH][FATAL] Missing environment variables: ${missing.join(", ")}`);
-  }
-})();
+if (!googleClientId || !googleClientSecret || !authSecret) {
+  throw new Error("❌ Missing Google OAuth credentials or AUTH_SECRET");
+}
 
 export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
   secret: authSecret,
-  trustHost: true, // Re-enabled to fix PKCE/Origin issues in local dev
-  debug: true,
+  trustHost: true,
+  debug: process.env.NODE_ENV === "development",
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
-  logger: {
-    error(error) {
-      console.error("[AUTH][ERROR]", error);
-    },
-    warn(code) {
-      console.warn("[AUTH][WARN]", code);
-    },
-    debug(code, metadata) {
-      // Clean metadata of secrets before logging
-      const safeMetadata = metadata ? JSON.parse(JSON.stringify(metadata)) : metadata;
-      if (safeMetadata?.client_secret) safeMetadata.client_secret = "[REDACTED]";
-      console.log("[AUTH][DEBUG]", code, safeMetadata);
-    },
-  },
   pages: {
     signIn: "/auth/signin",
-    signOut: "/auth/signout",
+    signOut: "/auth/signout", 
     error: "/auth/error",
     newUser: "/onboarding",
   },
   providers: [
     Google({
-      clientId: googleClientId,
-      clientSecret: googleClientSecret,
+      clientId: googleClientId!,
+      clientSecret: googleClientSecret!,
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline", 
+          response_type: "code"
+        }
+      }
     }),
     Credentials({
       name: "credentials",
@@ -109,12 +88,43 @@ export const authConfig: NextAuthConfig = {
   ],
   callbacks: {
     async redirect({ url, baseUrl }) {
-      // If the redirect URL is relative, prepend baseUrl
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      console.log("🔄 [REDIRECT CALLBACK]", { url, baseUrl });
+
+      // Allow Google OAuth authorization redirects (external origin).
+      // Without this, an overly-strict redirect policy can break OAuth initiation.
+      try {
+        const u = new URL(url);
+        if (u.origin === "https://accounts.google.com") {
+          console.log("✅ Allowing Google OAuth redirect:", u.origin);
+          return url;
+        }
+      } catch {
+        // ignore parse errors
+      }
+      
+      // In development, force strictly to localhost:3000 for relative URLs
+      const effectiveBaseUrl = process.env.NODE_ENV === "development" ? "http://localhost:3000" : baseUrl;
+      
+      // If the redirect URL is relative, prepend effectiveBaseUrl
+      if (url.startsWith("/")) {
+        console.log(`🏠 Relative redirect: ${effectiveBaseUrl}${url}`);
+        return `${effectiveBaseUrl}${url}`;
+      }
+      
       // Allow internal redirects within the same origin
-      else if (new URL(url).origin === baseUrl) return url;
-      // Default to baseUrl (localhost:3000)
-      return baseUrl;
+      try {
+        const urlOrigin = new URL(url).origin;
+        if (urlOrigin === effectiveBaseUrl) {
+          console.log(`✅ Internal redirect allowed: ${url}`);
+          return url;
+        }
+      } catch (e) {
+        console.log("⚠️ URL parsing failed, using fallback");
+      }
+
+      // Default to effectiveBaseUrl (e.g. localhost:3000 in dev)
+      console.log(`🔄 Default redirect: ${effectiveBaseUrl}`);
+      return effectiveBaseUrl;
     },
     async jwt({ token, user, trigger }) {
       if (user) {
