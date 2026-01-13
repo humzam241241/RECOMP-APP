@@ -38,7 +38,7 @@ const authSecret = (process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET)?.tri
 export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
   secret: authSecret,
-  trustHost: false, // Do not trust inferred hosts or network IPs
+  trustHost: true, // Re-enabled to fix PKCE/Origin issues in local dev
   debug: true,
   session: {
     strategy: "jwt",
@@ -109,12 +109,12 @@ export const authConfig: NextAuthConfig = {
   ],
   callbacks: {
     async redirect({ url, baseUrl }) {
-      // Always force redirects to resolve to localhost:3000
-      // If the redirect URL is relative, prepend localhost:3000
-      // If it's absolute but on a different host, force it back to localhost:3000
-      if (url.startsWith("/")) return `${FIXED_BASE_URL}${url}`;
-      else if (new URL(url).origin === FIXED_BASE_URL) return url;
-      return FIXED_BASE_URL;
+      // If the redirect URL is relative, prepend baseUrl
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Allow internal redirects within the same origin
+      else if (new URL(url).origin === baseUrl) return url;
+      // Default to baseUrl (localhost:3000)
+      return baseUrl;
     },
     async jwt({ token, user, trigger }) {
       if (user) {
