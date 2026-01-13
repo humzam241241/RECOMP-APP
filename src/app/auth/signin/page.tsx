@@ -359,9 +359,26 @@ export default function SignInPage() {
 
     try {
       addToErrorLog(`➡️ Using callbackUrl: ${callbackUrl}`);
-      // Let next-auth/react handle CSRF + correct endpoint/methods
-      await signIn("google", { callbackUrl });
-      addToErrorLog("⚠️ signIn('google') returned without redirect (unexpected)");      
+      addToErrorLog("🧪 Calling signIn('google', { redirect: false }) to capture returned URL...");
+
+      const result = await signIn("google", { callbackUrl, redirect: false });
+      addToErrorLog(`signIn result: ${JSON.stringify(result)}`);
+
+      const url = result?.url || "";
+      if (url.includes("accounts.google.com")) {
+        addToErrorLog("✅ Got Google URL from NextAuth. Navigating now...");
+        window.location.assign(url);
+        return;
+      }
+
+      if (url) {
+        addToErrorLog(`⚠️ Got non-Google URL from NextAuth: ${url}`);
+        addToErrorLog("➡️ Navigating anyway (this will reveal the real error page)...");
+        window.location.assign(url);
+        return;
+      }
+
+      addToErrorLog("❌ signIn returned no URL. This usually means something blocked the request.");
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       addToErrorLog(`❌ signIn('google') threw: ${errorMsg}`);
