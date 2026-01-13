@@ -1,0 +1,657 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH MODELS (NextAuth)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                 String    @id @default(cuid())
+  name               String?
+  email              String    @unique
+  emailVerified      DateTime?
+  image              String?
+  password           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  onboardingComplete Boolean   @default(false)
+
+  // Auth relations
+  accounts Account[]
+  sessions Session[]
+
+  // Profile
+  profile UserProfile?
+
+  // Core domain relations
+  journeys          Journey[]
+  workoutSessions   WorkoutSession[]
+  nutritionPlans    NutritionPlan[]
+  nutritionLogs     NutritionLog[]
+  habits            Habit[]
+  habitLogs         HabitLog[]
+  dopamineDailies   DopamineDaily[]
+  mindsetProgresses MindsetProgress[]
+
+  // Running
+  runSessions RunSession[]
+
+  // Community
+  posts     CommunityPost[]
+  comments  Comment[]
+  likes     Like[]
+  followers Follow[]        @relation("following")
+  following Follow[]        @relation("followers")
+
+  // Water tracking
+  waterLogs WaterLog[]
+
+  // Quotes
+  savedQuotes SavedQuote[]
+
+  // Course progress
+  courseProgress CourseProgress[]
+}
+
+model UserProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Personal Info
+  displayName String? // Display name (different from account name)
+  username    String?   @unique // Unique handle for profile URL
+  bio         String?   @db.Text // User bio
+  dateOfBirth DateTime?
+  location    String? // City, Country
+  website     String? // Personal website URL
+
+  // Avatar/Photo
+  avatarUrl     String?
+  coverImageUrl String?
+
+  // Social Media Links
+  instagramUrl String?
+  twitterUrl   String?
+  youtubeUrl   String?
+  tiktokUrl    String?
+  linkedinUrl  String?
+
+  // Physical stats
+  height       Float? // in cm
+  weight       Float? // in kg
+  targetWeight Float? // in kg
+  age          Int?
+  gender       String? // male, female, other
+
+  // Activity & Goals
+  activityLevel   String? // sedentary, light, moderate, active, very_active
+  fitnessGoal     String? // lose_fat, build_muscle, recomposition, maintain, endurance
+  experienceLevel String? // beginner, intermediate, advanced
+
+  // Preferences
+  workoutDays          Int      @default(4)
+  preferredWorkoutTime String? // morning, afternoon, evening
+  dietaryRestrictions  String[] @default([])
+
+  // Privacy
+  isPublic   Boolean @default(true)
+  showStats  Boolean @default(true)
+  showStreak Boolean @default(true)
+
+  // Calculated fields
+  bmr  Float? // Basal Metabolic Rate
+  tdee Float? // Total Daily Energy Expenditure
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([username])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORE DOMAIN MODELS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Journey {
+  id          String    @id @default(cuid())
+  userId      String
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  currentDay  Int       @default(1)
+  phase       String    @default("foundation") // foundation, build, optimize
+  isActive    Boolean   @default(true)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutSessions WorkoutSession[]
+  nutritionPlans  NutritionPlan[]
+  dopamineDailies DopamineDaily[]
+
+  @@unique([userId, isActive])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WORKOUT MODELS (Enhanced)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WorkoutTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?  @db.Text
+  workoutType  String // strength, hiit, endurance, hypertrophy, cardio, flexibility
+  difficulty   String   @default("intermediate") // beginner, intermediate, advanced
+  duration     Int      @default(45) // estimated minutes
+  calories     Int? // estimated burn
+  equipment    String[] @default([])
+  muscleGroups String[] @default([])
+  isPreset     Boolean  @default(true)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  exercises TemplateExercise[]
+  sessions  WorkoutSession[]
+
+  @@index([workoutType])
+}
+
+model TemplateExercise {
+  id          String  @id @default(cuid())
+  templateId  String
+  name        String
+  description String?
+  targetSets  Int     @default(3)
+  targetReps  String  @default("8-12")
+  restSeconds Int     @default(90)
+  orderIndex  Int     @default(0)
+  notes       String?
+  videoUrl    String?
+  muscleGroup String?
+
+  template WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+model WorkoutSession {
+  id             String    @id @default(cuid())
+  userId         String
+  journeyId      String?
+  templateId     String?
+  dayNumber      Int?
+  workoutType    String // strength, hiit, endurance, hypertrophy, push, pull, legs, rest, cardio
+  name           String?
+  status         String    @default("pending") // pending, in_progress, completed, skipped
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  duration       Int? // in minutes
+  caloriesBurned Int?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  journey   Journey?         @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  template  WorkoutTemplate? @relation(fields: [templateId], references: [id])
+  exercises Exercise[]
+
+  @@unique([userId, dayNumber, journeyId])
+  @@index([userId, dayNumber])
+  @@index([workoutType])
+}
+
+model Exercise {
+  id               String   @id @default(cuid())
+  workoutSessionId String
+  name             String
+  targetSets       Int      @default(3)
+  targetReps       String   @default("8-12") // e.g. "8-12" or "15"
+  restSeconds      Int      @default(90)
+  orderIndex       Int      @default(0)
+  notes            String?
+  muscleGroup      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workoutSession WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  sets           ExerciseSet[]
+
+  @@index([workoutSessionId])
+}
+
+model ExerciseSet {
+  id          String    @id @default(cuid())
+  exerciseId  String
+  setNumber   Int
+  weight      Float?
+  reps        Int?
+  rpe         Int? // Rate of Perceived Exertion 1-10
+  duration    Int? // for timed exercises (seconds)
+  distance    Float? // for distance-based exercises (meters)
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, setNumber])
+  @@index([exerciseId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUNNING & CARDIO TRACKING
+// ─────────────────────────────────────────────────────────────────────────────
+
+model RunSession {
+  id           String    @id @default(cuid())
+  userId       String
+  type         String    @default("outdoor") // outdoor, treadmill, trail
+  distance     Float // in kilometers
+  duration     Int // in seconds
+  pace         Float? // min/km
+  calories     Int?
+  elevation    Float? // meters gained
+  heartRateAvg Int?
+  heartRateMax Int?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  route        String?   @db.Text // JSON of GPS coordinates
+  notes        String?
+  weather      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([startedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NUTRITION MODELS (Enhanced)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model NutritionPlan {
+  id             String   @id @default(cuid())
+  userId         String
+  journeyId      String?
+  dayNumber      Int?
+  date           DateTime @default(now())
+  targetCalories Int      @default(2000)
+  targetProtein  Int      @default(150) // grams
+  targetCarbs    Int      @default(200) // grams
+  targetFat      Int      @default(70) // grams
+  targetWater    Float    @default(3.0) // liters
+  mealPlan       String?  @db.Text // JSON string of meal suggestions
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  journey       Journey?       @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  nutritionLogs NutritionLog[]
+
+  @@unique([userId, dayNumber, journeyId])
+  @@index([userId, dayNumber])
+  @@index([date])
+}
+
+model NutritionLog {
+  id              String   @id @default(cuid())
+  userId          String
+  nutritionPlanId String?
+  mealType        String // breakfast, lunch, dinner, snack
+  name            String?
+  description     String?
+  calories        Int      @default(0)
+  protein         Int      @default(0)
+  carbs           Int      @default(0)
+  fat             Int      @default(0)
+  fiber           Int?
+  sugar           Int?
+  sodium          Int?
+  servingSize     String?
+  loggedAt        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nutritionPlan NutritionPlan? @relation(fields: [nutritionPlanId], references: [id], onDelete: Cascade)
+
+  @@index([userId, nutritionPlanId])
+  @@index([loggedAt])
+}
+
+model WaterLog {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Float // in liters
+  loggedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loggedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HABIT & DOPAMINE MODELS (Enhanced)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Habit {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  description  String?
+  type         String // good, bad
+  category     String? // sleep, nutrition, exercise, mindfulness, vice, social, productivity
+  dopamineType String? // natural, artificial (for understanding dopamine sources)
+  frequency    String   @default("daily") // daily, weekly, custom
+  targetCount  Int      @default(1)
+  icon         String?
+  color        String?
+  isActive     Boolean  @default(true)
+  isPreset     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitLogs HabitLog[]
+
+  @@index([userId, type])
+}
+
+model HabitLog {
+  id              String   @id @default(cuid())
+  userId          String
+  habitId         String
+  dopamineDailyId String?
+  type            String // good, bad
+  intensity       Int? // 1-5 scale for urge intensity
+  trigger         String? // what triggered this habit
+  mood            String? // how user felt before/after
+  loggedAt        DateTime @default(now())
+  notes           String?
+  swapFromLogId   String? // Reference to bad habit log if this is a swap
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habit         Habit          @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  dopamineDaily DopamineDaily? @relation(fields: [dopamineDailyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dopamineDailyId])
+  @@index([habitId])
+}
+
+model DopamineDaily {
+  id              String   @id @default(cuid())
+  userId          String
+  journeyId       String?
+  dayNumber       Int?
+  date            DateTime @default(now())
+  score           Int      @default(0)
+  goodCount       Int      @default(0)
+  badCount        Int      @default(0)
+  naturalCount    Int      @default(0) // natural dopamine sources
+  artificialCount Int      @default(0) // artificial dopamine sources
+  streakDays      Int      @default(0)
+  firstWin        Boolean  @default(false)
+  swapBonus       Boolean  @default(false)
+  streakBonus     Boolean  @default(false)
+  perfectDay      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  journey   Journey?   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  habitLogs HabitLog[]
+
+  @@unique([userId, dayNumber, journeyId])
+  @@index([userId, dayNumber])
+  @@index([date])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MINDSET & BRAIN SCIENCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MindsetLesson {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  content     String   @db.Text
+  unlockDay   Int
+  orderIndex  Int      @default(0)
+  category    String? // motivation, habit_science, psychology, nutrition_mindset, brain_science, discipline, decision_making
+  brainRegion String? // prefrontal_cortex, limbic_system, basal_ganglia, etc.
+  duration    Int      @default(5) // estimated reading time in minutes
+  videoUrl    String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  progresses MindsetProgress[]
+
+  @@unique([unlockDay, orderIndex])
+  @@index([unlockDay])
+  @@index([category])
+}
+
+model MindsetProgress {
+  id              String    @id @default(cuid())
+  userId          String
+  mindsetLessonId String
+  isUnlocked      Boolean   @default(false)
+  isCompleted     Boolean   @default(false)
+  quizScore       Int?
+  unlockedAt      DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mindsetLesson MindsetLesson @relation(fields: [mindsetLessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mindsetLessonId])
+  @@index([userId])
+}
+
+model BrainCourse {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  category    String // dopamine, discipline, decision_making, habits, motivation, willpower
+  difficulty  String   @default("beginner")
+  duration    Int      @default(15) // total minutes
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modules  CourseModule[]
+  progress CourseProgress[]
+
+  @@index([category])
+}
+
+model CourseModule {
+  id         String   @id @default(cuid())
+  courseId   String
+  title      String
+  content    String   @db.Text
+  videoUrl   String?
+  duration   Int      @default(5)
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  course BrainCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+}
+
+model CourseProgress {
+  id            String    @id @default(cuid())
+  userId        String
+  courseId      String
+  currentModule Int       @default(0)
+  isCompleted   Boolean   @default(false)
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course BrainCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+}
+
+model Quote {
+  id        String   @id @default(cuid())
+  text      String   @db.Text
+  author    String
+  category  String // motivation, discipline, fitness, mindset, success, brain_science
+  tags      String[] @default([])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  savedBy SavedQuote[]
+
+  @@index([category])
+}
+
+model SavedQuote {
+  id      String   @id @default(cuid())
+  userId  String
+  quoteId String
+  savedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, quoteId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMUNITY MODELS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CommunityPost {
+  id            String   @id @default(cuid())
+  userId        String
+  type          String   @default("post") // post, workout_share, progress_update, achievement
+  title         String?
+  content       String   @db.Text
+  imageUrl      String?
+  workoutId     String?
+  visibility    String   @default("public") // public, followers, private
+  likesCount    Int      @default(0)
+  commentsCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  parentId  String? // for nested replies
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent  Comment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[]     @relation("CommentReplies")
+
+  @@index([postId])
+  @@index([userId])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("followers", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
