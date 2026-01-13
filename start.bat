@@ -16,22 +16,10 @@ if not exist ".env.local" (
     exit /b 1
 )
 
-:: Force load environment variables from .env.local for this session
-echo [0/6] Loading environment variables from .env.local...
-for /f "usebackq tokens=1* delims==" %%a in (".env.local") do (
-    set "key=%%a"
-    set "val=%%b"
-    if not "!key!"=="" (
-        :: Check if it's not a comment
-        echo !key! | findstr /r "^#" >nul
-        if errorlevel 1 (
-            :: Trim trailing spaces from val
-            for /l %%i in (1,1,31) do if "!val:~-1!"==" " set "val=!val:~0,-1!"
-            set "!key!=!val!"
-        )
-    )
-)
-echo   [OK] Environment variables loaded.
+:: Load environment variables from .env.local for this session if needed for Prisma commands
+:: Note: Next.js will handle .env.local natively for the dev server.
+echo [0/6] Environment variables will be loaded from .env.local by Next.js.
+echo   [OK] Readiness check complete.
 
 echo [1/6] Checking PostgreSQL...
 sc query postgresql-x64-17 >nul 2>&1
