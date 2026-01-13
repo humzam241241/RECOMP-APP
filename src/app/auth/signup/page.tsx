@@ -149,6 +149,7 @@ export default function SignUpPage() {
 
             {/* Google Sign Up */}
             <Button
+              type="button"
               variant="secondary"
               fullWidth
               onClick={handleGoogleSignUp}

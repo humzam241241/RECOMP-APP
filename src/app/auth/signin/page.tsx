@@ -353,17 +353,11 @@ export default function SignInPage() {
   };
 
   const handleGoogleSignIn = async () => {
-    addToErrorLog("🔵 Google Sign-In button clicked");
-    setAuthError(null);
-    setIsLoading(true);
-
     try {
       await signIn("google", { callbackUrl: "/" });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      addToErrorLog(`❌ Google sign-in failed: ${errorMsg}`);
       setAuthError(`Google sign-in failed: ${errorMsg}`);
-      setIsLoading(false);
     }
   };
 
@@ -588,11 +582,10 @@ export default function SignInPage() {
 
             {/* Google Sign In */}
             <Button
+              type="button"
               variant="secondary"
               fullWidth
               onClick={handleGoogleSignIn}
-              isLoading={isLoading && debugInfo.includes("Google")}
-              disabled={isLoading}
               style={{ marginBottom: "var(--spacing-lg)" }}
             >
               <GoogleIcon />

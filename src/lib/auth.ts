@@ -30,12 +30,6 @@ export const authConfig: NextAuthConfig = {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
-  pages: {
-    signIn: "/auth/signin",
-    signOut: "/auth/signout", 
-    error: "/auth/error",
-    newUser: "/onboarding",
-  },
   providers: [
     Google({
       clientId: googleClientId!,
