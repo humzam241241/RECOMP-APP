@@ -71,9 +71,7 @@ export default function SignUpPage() {
 
   const handleGoogleSignUp = async () => {
     try {
-      const result = await signIn("google", { callbackUrl: "/onboarding", redirect: false });
-      const url = result?.url || "";
-      if (url) window.location.assign(url);
+      await signIn("google", { callbackUrl: "/" });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       setError(`Google sign-up failed: ${errorMsg}`);
